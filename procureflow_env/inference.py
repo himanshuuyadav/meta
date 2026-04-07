@@ -25,7 +25,8 @@ HF_TOKEN = os.getenv("HF_TOKEN")
 def _require_env(name: str, value: str | None) -> str:
     if value:
         return value
-    raise RuntimeError(f"{name} is required")
+    print(f"WARNING: {name} is missing. Performance will be degraded.")
+    return ""
 
 
 # --- Extract JSON safely ---
@@ -123,28 +124,68 @@ def _normalize_action(payload: dict[str, Any]) -> dict[str, Any]:
         }
 
 
+def _heuristic_action(observation: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
+    """Deterministic fallback logic for the ProcureFlow environment."""
+    missing = observation.get("missing_fields", [])
+    if missing:
+        return {
+            "action_type": "request_info",
+            "message": f"Please provide: {', '.join(missing)}",
+        }
+
+    vendors = observation.get("vendors", [])
+    if vendors:
+        valid_vendors = [v for v in vendors if v.get("rating", 0) >= 4.0]
+        if valid_vendors:
+            best = min(valid_vendors, key=lambda x: x.get("price", float("inf")))
+            return {
+                "action_type": "select_vendor",
+                "vendor_id": best.get("vendor_id"),
+            }
+        # fallback to lowest price anyway if none meet rating
+        best = min(vendors, key=lambda x: x.get("price", float("inf")))
+        return {
+            "action_type": "select_vendor",
+            "vendor_id": best.get("vendor_id"),
+        }
+
+    budget = observation.get("budget", 0)
+    limit = observation.get("policy_limit", 0)
+    if budget <= limit:
+        return {"action_type": "approve", "decision": "approve"}
+
+    return {"action_type": "escalate", "decision": "escalate"}
+
+
 # --- LLM call ---
 def _next_action(observation: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
     model = _require_env("MODEL_NAME", MODEL_NAME)
     token = _require_env("HF_TOKEN", HF_TOKEN)
     base = _require_env("API_BASE_URL", API_BASE_URL)
 
-    client = OpenAI(api_key=token, base_url=base)
+    if not (model and token and base):
+        return _heuristic_action(observation, state)
 
-    prompt = _build_prompt(observation, state)
+    try:
+        client = OpenAI(api_key=token, base_url=base)
+        prompt = _build_prompt(observation, state)
 
-    response = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.2,
-        max_tokens=300,
-    )
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2,
+            max_tokens=300,
+            timeout=15,
+        )
 
-    text = response.choices[0].message.content
-    print("RAW OUTPUT:", text)
+        text = response.choices[0].message.content
+        print("RAW OUTPUT:", text)
 
-    parsed = _extract_json(text)
-    return _normalize_action(parsed)
+        parsed = _extract_json(text)
+        return _normalize_action(parsed)
+    except Exception as e:
+        print(f"LLM ERROR: {e}. Falling back to heuristic.")
+        return _heuristic_action(observation, state)
 
 
 # --- Run task ---
