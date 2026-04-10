@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from openai import OpenAI
 
 from app.models import ActionModel
+from app.scoring import normalize_submission_score
 from app.server import app
 
 
@@ -274,10 +275,11 @@ def _emit_end(success: bool, steps: int, rewards: list[float]) -> None:
     print(f"[END] success={_bool_str(success)} steps={steps} rewards={reward_list}", flush=True)
 
 
-def _run_task(task_id: str, task_name: str) -> bool:
+def _run_task(task_id: str, task_name: str) -> float:
     rewards: list[float] = []
     steps_taken = 0
     success = False
+    score = normalize_submission_score(0.0)
     api_client = TestClient(app)
 
     try:
@@ -315,13 +317,20 @@ def _run_task(task_id: str, task_name: str) -> bool:
     except Exception:
         success = False
     finally:
+        # Always return a strict-open score, even if task execution failed.
+        try:
+            grader_response = api_client.post("/grader")
+            if grader_response.status_code < 400:
+                score = normalize_submission_score(float(grader_response.json().get("score", 0.0)))
+        except Exception:
+            score = normalize_submission_score(0.0)
         api_client.close()
         _emit_end(success, steps_taken, rewards)
 
-    return success
+    return score
 
 
-def run_inference() -> dict[str, bool]:
+def run_inference() -> dict[str, float]:
     return {
         "easy": _run_task("easy_policy", "easy"),
         "medium": _run_task("medium_vendor_selection", "medium"),
