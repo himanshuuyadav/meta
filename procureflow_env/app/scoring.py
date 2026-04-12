@@ -4,22 +4,23 @@ from __future__ import annotations
 
 
 def normalize_submission_score(score: float) -> float:
-    """Ensure score is strictly within open interval (0, 1).
+    """Ensure score is strictly within the range [0.1, 0.99].
     
-    Maps boundary values to values just inside the interval to satisfy
-    validation requirements: score > 0.0 and score < 1.0
+    Clamps boundary values to ensure they satisfy validation requirements:
+    score > 0.0 and score < 1.0, while using safer bounds of [0.1, 0.99].
     """
-    epsilon = 1e-6
+    min_score = 0.1
+    max_score = 0.99
     
     if score <= 0.0:
-        return epsilon
+        return min_score
     if score >= 1.0:
-        return 1.0 - epsilon
+        return max_score
     
-    # Extra safety against edge cases from floating point arithmetic
-    if score < epsilon:
-        return epsilon
-    if score > 1.0 - epsilon:
-        return 1.0 - epsilon
+    # Clamp within the safe range
+    if score < min_score:
+        return min_score
+    if score > max_score:
+        return max_score
     
     return score
