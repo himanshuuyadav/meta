@@ -72,10 +72,10 @@ class ResetRequest(BaseModel):
 class BaselineResult(BaseModel):
     """Score bundle returned by the heuristic baseline endpoint."""
 
-    easy: float
-    medium: float
-    hard: float
-    average: float
+    easy: float = Field(..., gt=0.0, lt=1.0)
+    medium: float = Field(..., gt=0.0, lt=1.0)
+    hard: float = Field(..., gt=0.0, lt=1.0)
+    average: float = Field(..., gt=0.0, lt=1.0)
 
 
 class TaskDescriptor(BaseModel):
