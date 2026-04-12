@@ -1,12 +1,15 @@
 """Deterministic grader for the hard task."""
 
 from app.models import TaskData
-from app.scoring import normalize_submission_score
 from app.state import RuntimeState
 
 
 def grade_hard(task: TaskData, runtime_state: RuntimeState) -> float:
-    """Grade the multi-step procurement workflow deterministically."""
+    """Grade the multi-step procurement workflow deterministically.
+
+    Returns a raw score in [0.0, 1.0].  Normalization to the strict-open
+    interval (0, 1) is applied by env.grade() via normalize_submission_score.
+    """
     score = 0.0
     progress = runtime_state.trace.progress
 
@@ -28,4 +31,4 @@ def grade_hard(task: TaskData, runtime_state: RuntimeState) -> float:
     ):
         score += 0.2
 
-    return normalize_submission_score(min(score, 1.0))
+    return min(score, 1.0)
