@@ -300,7 +300,7 @@ def _run_task(task_id: str, task_name: str) -> float:
 
             step_data = step.json()
             reward = float(step_data.get("reward", 0.1))
-            reward = max(min(reward, 0.999), 0.001)
+            reward = max(min(reward, 0.99), 0.1)
             done = bool(step_data.get("done", False))
             info = step_data.get("info", {})
             error = info.get("error") if isinstance(info, dict) else None
